@@ -5,12 +5,13 @@
 // You must accept the terms of that agreement to use this software.
 //
 // Copyright (C) 2001-2005 Julian Hyde
-// Copyright (C) 2005-2017 Hitachi Vantara and others
+// Copyright (C) 2005-2019 Hitachi Vantara and others
 // All Rights Reserved.
 */
 package mondrian.rolap;
 
 import mondrian.olap.*;
+import mondrian.olap.Util.PropertyList;
 import mondrian.olap.fun.*;
 import mondrian.olap.type.*;
 import mondrian.resource.MondrianResource;
@@ -211,7 +212,7 @@ public class RolapSchema implements Schema {
         DataSource dataSource)
     {
         this(key, connectInfo, dataSource, md5Bytes, md5Bytes != null);
-        load(catalogUrl, catalogStr);
+        load(catalogUrl, catalogStr, connectInfo);
         assert this.md5Bytes != null;
     }
 
@@ -293,14 +294,29 @@ public class RolapSchema implements Schema {
         return LOGGER;
     }
 
+  /**
+   * @deprecated API changed to also pass Mondrian connection properties
+   * @param catalogUrl URL of catalog
+   * @param catalogStr Text of catalog, or null
+   */
+  @Deprecated
+    protected void load(String catalogUrl, String catalogStr) {
+      load(catalogUrl, catalogStr, new PropertyList());
+    }
+
     /**
      * Method called by all constructors to load the catalog into DOM and build
      * application mdx and sql objects.
      *
      * @param catalogUrl URL of catalog
      * @param catalogStr Text of catalog, or null
+     * @param connectInfo Mondrian connection properties
      */
-    protected void load(String catalogUrl, String catalogStr) {
+    protected void load(
+        String catalogUrl,
+        String catalogStr,
+        PropertyList connectInfo)
+    {
         try {
             final Parser xmlParser = XOMUtil.createDefaultParser();
 
@@ -370,7 +386,7 @@ public class RolapSchema implements Schema {
             throw Util.newError(e, "while parsing catalog " + catalogUrl);
         }
 
-        aggTableManager.initialize();
+        aggTableManager.initialize(connectInfo);
         setSchemaLoadDate();
     }
 
@@ -388,12 +404,10 @@ public class RolapSchema implements Schema {
         final String schemaMajor =
             versionParts.length > 0 ? versionParts[0] : "";
 
-        MondrianServer.MondrianVersion mondrianVersion =
-            MondrianServer.forId(null).getVersion();
-        final String serverMajor =
-            mondrianVersion.getMajorVersion() + ""; // "3"
+        String serverSchemaVersion =
+            Integer.toString(MondrianServer.forId(null).getSchemaVersion());
 
-        if (serverMajor.compareTo(schemaMajor) < 0) {
+        if (serverSchemaVersion.compareTo(schemaMajor) < 0) {
             String errorMsg =
                 "Schema version '" + schemaVersion
                 + "' is later than schema version "
@@ -1325,7 +1339,8 @@ System.out.println("RolapSchema.createMemberReader: CONTAINS NAME");
         return internalConnection;
     }
 
-    private RolapStar makeRolapStar(final MondrianDef.Relation fact) {
+ // package-local visibility for testing purposes
+    RolapStar makeRolapStar(final MondrianDef.Relation fact) {
         DataSource dataSource = getInternalConnection().getDataSource();
         return new RolapStar(this, dataSource, fact);
     }
@@ -1334,8 +1349,8 @@ System.out.println("RolapSchema.createMemberReader: CONTAINS NAME");
      * <code>RolapStarRegistry</code> is a registry for {@link RolapStar}s.
      */
     public class RolapStarRegistry {
-        private final Map<String, RolapStar> stars =
-            new HashMap<String, RolapStar>();
+        private final Map<List<String>, RolapStar> stars =
+            new HashMap<List<String>, RolapStar>();
 
         RolapStarRegistry() {
         }
@@ -1348,23 +1363,23 @@ System.out.println("RolapSchema.createMemberReader: CONTAINS NAME");
         synchronized RolapStar getOrCreateStar(
             final MondrianDef.Relation fact)
         {
-            final String factTableName = fact.getAlias();
-            RolapStar star = stars.get(factTableName);
+            final List<String> rolapStarKey = RolapUtil.makeRolapStarKey(fact);
+            RolapStar star = stars.get(rolapStarKey);
             if (star == null) {
                 star = makeRolapStar(fact);
-                stars.put(factTableName, star);
+                stars.put(rolapStarKey, star);
                 // let cache manager load pending segments
                 // from external cache if needed
                 MondrianServer.forConnection(
-                    internalConnection).getAggregationManager().cacheMgr
+                    internalConnection).getAggregationManager().getCacheMgr()
                     .loadCacheForStar(star);
             }
             return star;
         }
 
-        synchronized RolapStar getStar(final String factTableName) {
-            return stars.get(factTableName);
-        }
+        synchronized RolapStar getStar(List<String> starKey) {
+          return stars.get(starKey);
+      }
 
         synchronized Collection<RolapStar> getStars() {
             return stars.values();
@@ -1403,8 +1418,12 @@ System.out.println("RolapSchema.createMemberReader: CONTAINS NAME");
     }
 
     public RolapStar getStar(final String factTableName) {
-        return getRolapStarRegistry().getStar(factTableName);
+        return getStar(RolapUtil.makeRolapStarKey(factTableName));
     }
+
+    public RolapStar getStar(final List<String> starKey) {
+      return getRolapStarRegistry().getStar(starKey);
+  }
 
     public Collection<RolapStar> getStars() {
         return getRolapStarRegistry().getStars();

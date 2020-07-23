@@ -5,21 +5,22 @@
   <parent>
     <groupId>pentaho</groupId>
     <artifactId>pentaho-mondrian-parent-pom</artifactId>
-    <version>8.0-SNAPSHOT</version>
+    <version>9.1.0.0-SNAPSHOT</version>
   </parent>
   <artifactId>workbench</artifactId>
-  <version>8.0-SNAPSHOT</version>
+  <version>9.1.0.0-SNAPSHOT</version>
   <name>Pentaho Community Edition Project: ${project.artifactId}</name>
   <description>Mondrian Schema Workbench</description>
   <url>http://mondrian.pentaho.com</url>
   <properties>
     <jlfgr.version>1.0</jlfgr.version>
-    <pentaho-launcher.version>8.0-SNAPSHOT</pentaho-launcher.version>
-    <dependency.groovy-all.revision>2.4.7</dependency.groovy-all.revision>
-    <dependency.pdi-dataservice-client-plugin.revision>8.0-SNAPSHOT</dependency.pdi-dataservice-client-plugin.revision>
-    <dependency.oss-licenses.revision>8.0-SNAPSHOT</dependency.oss-licenses.revision>
+    <pentaho-launcher.version>9.1.0.0-SNAPSHOT</pentaho-launcher.version>
+    <dependency.groovy-all.revision>2.4.8</dependency.groovy-all.revision>
+    <pdi-dataservice-client-plugin.version>9.1.0.0-SNAPSHOT</pdi-dataservice-client-plugin.version>
+    <oss-licenses.version>9.1.0.0-SNAPSHOT</oss-licenses.version>
     <dependency.jersey.revision>1.19.1</dependency.jersey.revision>
-    <dependency.kettle.revision>8.0-SNAPSHOT</dependency.kettle.revision>
+    <pdi.version>9.1.0.0-SNAPSHOT</pdi.version>
+    <commons-xul.version>9.1.0.0-SNAPSHOT</commons-xul.version>
   </properties>
   <dependencies>
     <dependency>
@@ -69,7 +70,7 @@
     <dependency>
       <groupId>pentaho-kettle</groupId>
       <artifactId>kettle-dbdialog</artifactId>
-      <version>${dependency.kettle.revision}</version>
+      <version>${pdi.version}</version>
       <exclusions>
         <exclusion>
           <artifactId>*</artifactId>
@@ -80,7 +81,7 @@
     <dependency>
       <groupId>pentaho-kettle</groupId>
       <artifactId>kettle-core</artifactId>
-      <version>${dependency.kettle.revision}</version>
+      <version>${pdi.version}</version>
       <exclusions>
         <exclusion>
           <artifactId>*</artifactId>
@@ -89,9 +90,9 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>pentaho</groupId>
-      <artifactId>pentaho-xul-core</artifactId>
-      <version>${dependency.kettle.revision}</version>
+      <groupId>org.pentaho</groupId>
+      <artifactId>commons-xul-core</artifactId>
+      <version>${commons-xul.version}</version>
       <exclusions>
         <exclusion>
           <artifactId>*</artifactId>
@@ -100,9 +101,9 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>pentaho</groupId>
-      <artifactId>pentaho-xul-swing</artifactId>
-      <version>${dependency.kettle.revision}</version>
+      <groupId>org.pentaho</groupId>
+      <artifactId>commons-xul-swing</artifactId>
+      <version>${commons-xul.version}</version>
       <exclusions>
         <exclusion>
           <artifactId>*</artifactId>
@@ -113,7 +114,6 @@
     <dependency>
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
-      <version>1.2.14</version>
       <exclusions>
         <exclusion>
           <artifactId>*</artifactId>

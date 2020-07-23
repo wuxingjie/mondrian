@@ -4,25 +4,40 @@
 // http://www.eclipse.org/legal/epl-v10.html.
 // You must accept the terms of that agreement to use this software.
 //
-// Copyright (c) 2002-2017 Hitachi Vantara..  All rights reserved.
+// Copyright (c) 2002-2020 Hitachi Vantara.  All rights reserved.
 */
 package mondrian.spi.impl;
+
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.Date;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Time;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import mondrian.olap.MondrianProperties;
 import mondrian.olap.Util;
 import mondrian.rolap.SqlStatement;
 import mondrian.spi.Dialect;
-import mondrian.spi.Dialect.DatabaseProduct;
 import mondrian.spi.StatisticsProvider;
 import mondrian.util.ClassResolver;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-
-import java.sql.*;
-import java.sql.Date;
-import java.util.*;
-import java.util.regex.Pattern;
 
 /**
  * Implementation of {@link Dialect} based on a JDBC connection and metadata.
@@ -124,6 +139,10 @@ public class JdbcDialectImpl implements Dialect {
         DEFAULT_TYPE_MAP = Collections.unmodifiableMap(typeMapInitial);
     }
 
+    private final String flagsRegexp = "^(\\(\\?([a-zA-Z]+)\\)).*$";
+    private final Pattern flagsPattern = Pattern.compile( flagsRegexp );
+    
+    
     /**
      * Creates a JdbcDialectImpl.
      *
@@ -457,12 +476,21 @@ public class JdbcDialectImpl implements Dialect {
         String value)
     {
         // NOTE jvs 1-Jan-2007:  See quoteTimestampLiteral for explanation.
+        Timestamp timestamp;
         try {
-            Timestamp.valueOf(value);
+            timestamp = Timestamp.valueOf(value);
         } catch (IllegalArgumentException ex) {
             throw new NumberFormatException(
                 "Illegal TIMESTAMP literal:  " + value);
         }
+        quoteTimestampLiteral(buf, timestamp.toString(), timestamp);
+    }
+
+    protected void quoteTimestampLiteral(
+        StringBuilder buf,
+        String value,
+        Timestamp timestamp)
+    {
         buf.append("TIMESTAMP ");
         Util.singleQuoteString(value, buf);
     }
@@ -1087,10 +1115,11 @@ public class JdbcDialectImpl implements Dialect {
         } else if (productName.startsWith("HP Neoview")) {
             return DatabaseProduct.NEOVIEW;
         } else if (upperProductName.indexOf("SYBASE") >= 0
-            || upperProductName.indexOf("ADAPTIVE SERVER") >= 0)
-        {
+            || upperProductName.indexOf("ADAPTIVE SERVER") >= 0
+            || upperProductName.indexOf("SQL ANYWHERE") >= 0 ) {
             // Sysbase Adaptive Server Enterprise 15.5 via jConnect 6.05 returns
             // "Adaptive Server Enterprise" as a product name.
+            // Also fixes Sybase SQL ANYWHERE 17 which returns "SQL ANYWHERE"
             return DatabaseProduct.SYBASE;
         } else if (upperProductName.indexOf("TERADATA") >= 0) {
             return DatabaseProduct.TERADATA;
@@ -1100,6 +1129,10 @@ public class JdbcDialectImpl implements Dialect {
             return DatabaseProduct.VERTICA;
         } else if (upperProductName.indexOf("VECTORWISE") >= 0) {
             return DatabaseProduct.VECTORWISE;
+        } else if (upperProductName.startsWith("PDI")) {
+            return DatabaseProduct.PDI;
+        } else if (upperProductName.startsWith("GOOGLE BIGQUERY")) {
+            return DatabaseProduct.GOOGLEBIGQUERY;
         } else {
             return DatabaseProduct.getDatabaseProduct(upperProductName);
         }
@@ -1156,13 +1189,58 @@ public class JdbcDialectImpl implements Dialect {
             LOGGER.debug("NOT Using " + databaseProduct.name() + " dialect");
             return false;
         } catch (SQLException e) {
-            LOGGER.debug(
-                "NOT Using " + databaseProduct.name() + " dialect.", e);
+            // this exception can be hit by any db types that don't support
+            // 'select version()'
+            // no need to log exception, this is an "expected" error as we
+            // loop through all dialects looking for one that matches.
+            LOGGER.debug("NOT Using " + databaseProduct.name() + " dialect.");
             return false;
         } finally {
             Util.close(resultSet, statement, null);
         }
     }
+        
+  /**
+   * Helper method to extract and map Java regular expression embedded flags expressions
+   * to dialect specific flags.
+   * 
+   * All dialects will map the case insensitive expression (?i) to i.  
+   * However, Vertica maps the dotall flag (?s) to n.
+   * 
+   * For example, on Vertica, a regular expression like: 
+   * 
+   * "(?is).*Hello World.*" 
+   * 
+   * will return:
+   * 
+   * ".*Hello World.*" 
+   * 
+   * with dialect flags: 
+   * 
+   * "in"
+   * 
+   * @param origExp Java regular expression
+   * @param mapping 2D String array of supported Java flags that can be mapped to a dialect specific flag.
+   * @param dialectFlags Returns the dialect specific flags in the input regular expression.
+   * @return Regular expression with the Java flags removed.
+   */
+  public String extractEmbeddedFlags( String javaRegex, String[][] mapping, StringBuilder dialectFlags ) {
+    final Matcher flagsMatcher = flagsPattern.matcher( javaRegex );
+
+    if ( flagsMatcher.matches() ) {
+      final String flags = flagsMatcher.group( 2 );
+      for ( String[] flag : mapping ) {
+        if ( flags.contains( flag[0] ) ) {
+          dialectFlags.append( flag[1] );
+        }
+      }
+    }
+
+    if ( flagsMatcher.matches() ) {
+      javaRegex = javaRegex.substring( 0, flagsMatcher.start( 1 ) ) + javaRegex.substring( flagsMatcher.end( 1 ) );
+    }
+    return javaRegex;
+  }
 }
 
 // End JdbcDialectImpl.java

@@ -4,7 +4,7 @@
 // http://www.eclipse.org/legal/epl-v10.html.
 // You must accept the terms of that agreement to use this software.
 //
-// Copyright (C) 2002-2017 Hitachi Vantara and others
+// Copyright (C) 2002-2020 Hitachi Vantara and others
 // All Rights Reserved.
 */
 package mondrian.spi.impl;
@@ -25,8 +25,6 @@ import java.util.regex.*;
  */
 public class MySqlDialect extends JdbcDialectImpl {
 
-    private final String flagsRegexp = "^(\\(\\?([a-zA-Z])\\)).*$";
-    private final Pattern flagsPattern = Pattern.compile(flagsRegexp);
     private final String escapeRegexp = "(\\\\Q([^\\\\Q]+)\\\\E)";
     private final Pattern escapePattern = Pattern.compile(escapeRegexp);
 
@@ -224,6 +222,19 @@ public class MySqlDialect extends JdbcDialectImpl {
         buf.append('\'');
     }
 
+
+
+    @Override
+    public void quoteBooleanLiteral(StringBuilder buf, String value) {
+      if (!value.equalsIgnoreCase("1")
+          && !(value.equalsIgnoreCase("0")))
+      {
+        super.quoteBooleanLiteral(buf, value);
+      } else {
+        buf.append(value);
+      }
+    }
+
     @Override
     public String generateInline(
         List<String> columnNames,
@@ -290,18 +301,12 @@ public class MySqlDialect extends JdbcDialectImpl {
 
         // We might have to use case-insensitive matching
         javaRegex = DialectUtil.cleanUnicodeAwareCaseFlag(javaRegex);
-        final Matcher flagsMatcher = flagsPattern.matcher(javaRegex);
+        StringBuilder mappedFlags = new StringBuilder();
+        String[][] mapping = new String[][]{{"i","i"}};
+        javaRegex = extractEmbeddedFlags( javaRegex, mapping, mappedFlags );
         boolean caseSensitive = true;
-        if (flagsMatcher.matches()) {
-            final String flags = flagsMatcher.group(2);
-            if (flags.contains("i")) {
-                caseSensitive = false;
-            }
-        }
-        if (flagsMatcher.matches()) {
-            javaRegex =
-                javaRegex.substring(0, flagsMatcher.start(1))
-                + javaRegex.substring(flagsMatcher.end(1));
+        if (mappedFlags.toString().contains( "i" )) {
+          caseSensitive = false;
         }
         final Matcher escapeMatcher = escapePattern.matcher(javaRegex);
         while (escapeMatcher.find()) {

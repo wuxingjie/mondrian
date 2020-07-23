@@ -10,7 +10,7 @@
   == You must accept the terms of that agreement to use this software.
   ==
   == Copyright (C) 2000-2005 Julian Hyde
-  == Copyright (C) 2005-2012 Pentaho and others
+  == Copyright (C) 2005-2020 Hitachi Vantara and others
   == All Rights Reserved.
   ==
   == This file contains the text for all messages used by the mondrian
@@ -530,6 +530,10 @@
     <text>Number of iterations exceeded limit of {0,number} </text>
 </exception>
 
+<exception id="600060" name="JavaDoubleOverflow" className="java.sql.SQLDataException">
+    <text>Big decimal value in ''{0}'' exceeds double size.</text>
+</exception>
+
 <!-- empty ,invalid Dimension -->
 
 <exception id="601010" name="InvalidHierarchyCondition" className="mondrian.olap.InvalidHierarchyException">
@@ -788,6 +792,12 @@
 <message id="7000420" name="AggTableZeroSize">
     <text>
         Zero size Aggregate table ''{0}'' for Fact Table ''{1}''.
+    </text>
+</message>
+
+<message id="7000421" name="AggTableNoConstraintGenerated">
+    <text>
+        Aggregate star fact table ''{0}'':  A constraint will not be generated because name column is not the same as key column.
     </text>
 </message>
 <!-- Aggregate tables: end -->

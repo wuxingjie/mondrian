@@ -4,11 +4,12 @@
 * http://www.eclipse.org/legal/epl-v10.html.
 * You must accept the terms of that agreement to use this software.
 *
-* Copyright (c) 2002-2017 Hitachi Vantara..  All rights reserved.
+* Copyright (c) 2002-2018 Hitachi Vantara..  All rights reserved.
 */
 
 package mondrian.util;
 
+import junit.framework.Assert;
 import mondrian.olap.Util;
 import mondrian.test.I18nTest;
 
@@ -879,6 +880,39 @@ public class FormatTest extends TestCase {
                 "-Infinity");
         }
     }
+
+    // PDI-16761
+    public void testBigDecimalJavaFormat() {
+        BigDecimal bd = new BigDecimal("123456789123456789123456789");
+        Format.BasicFormat format = new Format.JavaFormat(Locale.FRENCH);
+        StringBuilder result = new StringBuilder();
+        format.format(bd, result);
+        // It should run without losing precision
+        Assert.assertEquals("123 456 789 123 456 789 123 456 789", result.toString());
+    }
+
+    /**
+     * Test case for bug <a href="http://jira.pentaho.com/browse/MONDRIAN-2613">
+     * MONDRIAN-2613</a>,
+     * "ArrayIndexOutOfBoundsException in mondrian.util.Format.formatFd2
+     * formatting a BigDecimal".
+     */
+    public void testBigDecimalWithSpecificCustomFormat() {
+      //the format string used in the jira case
+      final String format = "0000000000000";
+      //test data from the jira case
+      checkFormat(null, new BigDecimal("109146240.292"), format, "0000109146240");
+      checkFormat(null, new BigDecimal("0.123"), format, "0000000000000");
+      //additional data
+      checkFormat(null, new BigDecimal("1.1"), format, "0000000000001");
+      checkFormat(null, new BigDecimal("-1.1"), format, "-0000000000001");
+      checkFormat(null, new BigDecimal("0.1"), format, "0000000000000");
+      checkFormat(null, new BigDecimal("-0.1"), format, "0000000000000");
+      checkFormat(null, new BigDecimal("100000000.1"), format, "0000100000000");
+      checkFormat(null, new BigDecimal("-100000000.1"), format, "-0000100000000");
+      checkFormat(null, new BigDecimal("100000001.1"), format, "0000100000001");
+      checkFormat(null, new BigDecimal("100000000.5"), format, "0000100000001");
+      }
 }
 
 // End FormatTest.java

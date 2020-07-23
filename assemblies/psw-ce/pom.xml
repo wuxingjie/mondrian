@@ -5,23 +5,25 @@
   <parent>
     <groupId>pentaho</groupId>
     <artifactId>pentaho-mondrian-assemblies</artifactId>
-    <version>8.0-SNAPSHOT</version>
+    <version>9.1.0.0-SNAPSHOT</version>
   </parent>
   <artifactId>psw-ce</artifactId>
-  <version>8.0-SNAPSHOT</version>
+  <version>9.1.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Pentaho Schema Workbench - CE</name>
   <description>Mondrian Schema Workbench</description>
   <url>http://mondrian.pentaho.com</url>
   <properties>
     <jlfgr.version>1.0</jlfgr.version>
-    <pentaho-launcher.version>8.0-SNAPSHOT</pentaho-launcher.version>
+    <pentaho-launcher.version>9.1.0.0-SNAPSHOT</pentaho-launcher.version>
     <guava.version>17.0</guava.version>
-    <dependency.groovy-all.revision>2.4.7</dependency.groovy-all.revision>
-    <dependency.pdi-dataservice-client-plugin.revision>8.0-SNAPSHOT</dependency.pdi-dataservice-client-plugin.revision>
-    <dependency.oss-licenses.revision>8.0-SNAPSHOT</dependency.oss-licenses.revision>
+    <dependency.groovy-all.revision>2.4.8</dependency.groovy-all.revision>
+    <pdi-dataservice-client-plugin.version>9.1.0.0-SNAPSHOT</pdi-dataservice-client-plugin.version>
+    <oss-licenses.version>9.1.0.0-SNAPSHOT</oss-licenses.version>
     <dependency.jersey.revision>1.19.1</dependency.jersey.revision>
-    <dependency.kettle.revision>8.0-SNAPSHOT</dependency.kettle.revision>
+    <pdi.version>9.1.0.0-SNAPSHOT</pdi.version>
+    <commons-xul.version>9.1.0.0-SNAPSHOT</commons-xul.version>
+    <mondrian-schemaworkbench-plugins.version>9.1.0.0-SNAPSHOT</mondrian-schemaworkbench-plugins.version>
   </properties>
   <dependencies>
     <dependency>
@@ -78,12 +80,18 @@
     <dependency>
       <groupId>pentaho-kettle</groupId>
       <artifactId>kettle-dbdialog</artifactId>
-      <version>${dependency.kettle.revision}</version>
+      <version>${pdi.version}</version>
+      <exclusions>
+        <exclusion>
+          <artifactId>*</artifactId>
+          <groupId>*</groupId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>pentaho-kettle</groupId>
       <artifactId>kettle-core</artifactId>
-      <version>${dependency.kettle.revision}</version>
+      <version>${pdi.version}</version>
       <exclusions>
         <exclusion>
           <artifactId>avalon-framework-api</artifactId>
@@ -94,15 +102,7 @@
           <groupId>org.apache.avalon.framework</groupId>
         </exclusion>
         <exclusion>
-          <artifactId>batik-js</artifactId>
-          <groupId>org.apache.xmlgraphics</groupId>
-        </exclusion>
-        <exclusion>
-          <artifactId>batik-svggen</artifactId>
-          <groupId>org.apache.xmlgraphics</groupId>
-        </exclusion>
-        <exclusion>
-          <artifactId>fop</artifactId>
+          <artifactId>*</artifactId>
           <groupId>org.apache.xmlgraphics</groupId>
         </exclusion>
         <exclusion>
@@ -148,9 +148,9 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>pentaho</groupId>
-      <artifactId>pentaho-xul-core</artifactId>
-      <version>${dependency.kettle.revision}</version>
+      <groupId>org.pentaho</groupId>
+      <artifactId>commons-xul-core</artifactId>
+      <version>${commons-xul.version}</version>
       <exclusions>
         <exclusion>
           <artifactId>jdom</artifactId>
@@ -163,9 +163,9 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>pentaho</groupId>
-      <artifactId>pentaho-xul-swing</artifactId>
-      <version>${dependency.kettle.revision}</version>
+      <groupId>org.pentaho</groupId>
+      <artifactId>commons-xul-swing</artifactId>
+      <version>${commons-xul.version}</version>
     </dependency>
     <dependency>
       <groupId>pentaho</groupId>
@@ -173,15 +173,13 @@
       <version>${pentaho-launcher.version}</version>
     </dependency>
     <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <version>1.2.14</version>
-      <scope>compile</scope>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-log4j12</artifactId>
     </dependency>
     <dependency>
-      <groupId>pentaho</groupId>
-      <artifactId>pentaho-mondrianschemaworkbench-plugins</artifactId>
-      <version>${project.version}</version>
+      <groupId>org.pentaho</groupId>
+      <artifactId>mondrian-schemaworkbench-plugins</artifactId>
+      <version>${mondrian-schemaworkbench-plugins.version}</version>
     </dependency>
     <dependency>
       <groupId>org.codehaus.groovy</groupId>
@@ -206,23 +204,26 @@
     <dependency>
       <groupId>pentaho</groupId>
       <artifactId>pdi-dataservice-client-plugin</artifactId>
-      <version>${dependency.pdi-dataservice-client-plugin.revision}</version>
+      <version>${pdi-dataservice-client-plugin.version}</version>
     </dependency>
     <dependency>
       <groupId>xerces</groupId>
       <artifactId>xercesImpl</artifactId>
-      <version>${xercesImpl.version}</version>
     </dependency>
     <dependency>
       <groupId>pentaho</groupId>
       <artifactId>oss-licenses</artifactId>
-      <version>${dependency.oss-licenses.revision}</version>
+      <version>${oss-licenses.version}</version>
       <type>zip</type>
     </dependency>
     <dependency>
       <groupId>sun</groupId>
       <artifactId>jlfgr</artifactId>
       <version>${jlfgr.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>jaxen</groupId>
+      <artifactId>jaxen</artifactId>
     </dependency>
     
     <!-- change bellow scope to runtime to include database drivers -->
@@ -235,7 +236,6 @@
     <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
-      <version>${dependency.postgres.revision}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

@@ -5,7 +5,7 @@
 // You must accept the terms of that agreement to use this software.
 //
 // Copyright (C) 2003-2005 Julian Hyde
-// Copyright (C) 2005-2017 Hitachi Vantara
+// Copyright (C) 2005-2018 Hitachi Vantara
 // All Rights Reserved.
 //
 // jhyde, Feb 14, 2003
@@ -16,9 +16,14 @@ import mondrian.olap.*;
 import mondrian.rolap.*;
 import mondrian.spi.Dialect;
 
+import org.olap4j.OlapConnection;
+
 import java.math.BigDecimal;
 import java.sql.*;
 import java.text.MessageFormat;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -39,48 +44,64 @@ public class DrillThroughTest extends FoodMartTestCase {
         super(name);
     }
 
-    //DRILLTHROUGH MDX queries
-    private static final String CURRENT_MEMBER_CUSTOMER_FULL_NAME = "Jeanne Derry";
+    // DRILLTHROUGH MDX queries
+    private static final String CURRENT_MEMBER_CUSTOMER_FULL_NAME =
+        "Jeanne Derry";
     private static final String CURRENT_MEMBER_CUSTOMER_ID = "3";
     private static final String DRILLTHROUGH_QUERY_TEMPLATE = "DRILLTHROUGH \n"
-            + "// Request ID: 9520e524-4d2c-11e7-a0e2-a0d3c11aa164 - RUN_REPORT\n"
-            + "WITH\n"
-            + "SET [*NATIVE_CJ_SET] AS ''FILTER([Customers Dimension].[Customer Level Name].MEMBERS, NOT ISEMPTY ([Measures].[Store Sales]))''\n"
-            + "SET [*SORTED_ROW_AXIS] AS ''ORDER([*CJ_ROW_AXIS],[Customers Dimension].CURRENTMEMBER.ORDERKEY,BASC)''\n"
-            + "SET [*BASE_MEMBERS__Customers Dimension_] AS ''[Customers Dimension].[Customer Level Name].MEMBERS''\n"
-            + "SET [*BASE_MEMBERS__Measures_] AS '''{[Measures].[*FORMATTED_MEASURE_0]}'''\n"
-            + "SET [*CJ_ROW_AXIS] AS ''GENERATE([*NATIVE_CJ_SET], '{([Customers Dimension].CURRENTMEMBER)}')''\n"
-            + "MEMBER [Measures].[*FORMATTED_MEASURE_0] AS ''[Measures].[Store Sales]'', FORMAT_STRING = ''#,###.00'', SOLVE_ORDER=500\n"
-            + "SELECT\n"
-            + "FILTER([*BASE_MEMBERS__Measures_],([Measures].CurrentMember Is [Measures].[*FORMATTED_MEASURE_0])) ON COLUMNS\n"
-            + ",FILTER( [*SORTED_ROW_AXIS],([Customers Dimension].CurrentMember Is [Customers Dimension].[{0}])) ON ROWS\n"
-            + "FROM [SalesShort] RETURN [Customers Dimension].[Customer Level Name], [Product Dimension].[Product Level Name], [Measures].[Store Sales]";
-    private static final String DRILLTHROUGH_QUERY_WITH_CUSTOMER_FULL_NAME = MessageFormat.format( DRILLTHROUGH_QUERY_TEMPLATE, CURRENT_MEMBER_CUSTOMER_FULL_NAME);
-    private static final String DRILLTHROUGH_QUERY_WITH_CUSTOMER_ID = MessageFormat.format( DRILLTHROUGH_QUERY_TEMPLATE, CURRENT_MEMBER_CUSTOMER_ID);
-    //Schemas contained Levels with and without nameColumn attribute.
-    private static final String NAME_COLUMN_FULL_NAME = " nameColumn=\"fullname\" ";
-    private static final String NAME_COLUMN_PRODUCT_NAME = " nameColumn=\"product_name\" ";
-    private static final String SALES_ONLY_TEMPLATE = "<Schema name=\"FoodMartSalesOnly\">\n"
-         +" <Cube name=\"SalesShort\">\n"
-         +"   <Table name=\"sales_fact_1997\"/>\n"
-         +"   <Dimension name=\"Customers Dimension\" foreignKey=\"customer_id\">\n"
-         +"     <Hierarchy hasAll=\"true\" allMemberName=\"All Customers hierarchy name\" primaryKey=\"customer_id\">\n"
-         +"       <Table name=\"customer\"/>\n"
-         +"       <Level name=\"Customer Level Name\" caption=\"Customer Level Caption\" description=\"Customer Level Description\" column=\"customer_id\"{0}type=\"String\" uniqueMembers=\"true\" />\n"
-         +"     </Hierarchy>\n"
-         +"   </Dimension>\n"
-         +"   <Dimension name=\"Product Dimension\" foreignKey=\"product_id\">\n"
-         +"     <Hierarchy hasAll=\"true\" allMemberName=\"All products hierarchy name\" primaryKey=\"product_id\">\n"
-         +"       <Table name=\"product\"/>\n"
-         +"       <Level name=\"Product Level Name\" caption=\"Product Level Caption\" description=\"Product Level Description\" column=\"product_id\"{1}type=\"String\" uniqueMembers=\"true\" />\n"
-         +"     </Hierarchy>\n"
-         +"   </Dimension>\n"
-         +"   <Measure name=\"Store Sales\" column=\"store_sales\" aggregator=\"sum\" formatString=\"#,###.00\"/>\n"
-         +" </Cube>\n"
-         +"</Schema>\n";
+        + "// Request ID: 9520e524-4d2c-11e7-a0e2-a0d3c11aa164 - RUN_REPORT\n"
+        + "WITH\n"
+        + "SET [*NATIVE_CJ_SET] AS ''FILTER([Customers Dimension].[Customer Level Name].MEMBERS, NOT ISEMPTY ([Measures].[Store Sales]))''\n"
+        + "SET [*SORTED_ROW_AXIS] AS ''ORDER([*CJ_ROW_AXIS],[Customers Dimension].CURRENTMEMBER.ORDERKEY,BASC)''\n"
+        + "SET [*BASE_MEMBERS__Customers Dimension_] AS ''[Customers Dimension].[Customer Level Name].MEMBERS''\n"
+        + "SET [*BASE_MEMBERS__Measures_] AS '''{[Measures].[*FORMATTED_MEASURE_0]}'''\n"
+        + "SET [*CJ_ROW_AXIS] AS ''GENERATE([*NATIVE_CJ_SET], '{([Customers Dimension].CURRENTMEMBER)}')''\n"
+        + "MEMBER [Measures].[*FORMATTED_MEASURE_0] AS ''[Measures].[Store Sales]'', FORMAT_STRING = ''#,###.00'', SOLVE_ORDER=500\n"
+        + "SELECT\n"
+        + "FILTER([*BASE_MEMBERS__Measures_],([Measures].CurrentMember Is [Measures].[*FORMATTED_MEASURE_0])) ON COLUMNS\n"
+        + ",FILTER( [*SORTED_ROW_AXIS],([Customers Dimension].CurrentMember Is [Customers Dimension].[{0}])) ON ROWS\n"
+        + "FROM [SalesShort] RETURN [Customers Dimension].[Customer Level Name], [Product Dimension].[Product Level Name], [Measures].[Store Sales]";
 
-    private static final String SALES_ONLY_WITHOUT_NAME_COLUMN = MessageFormat.format( SALES_ONLY_TEMPLATE, " ", " " );
-    private static final String SALES_ONLY_WITH_NAME_COLUMN = MessageFormat.format( SALES_ONLY_TEMPLATE, NAME_COLUMN_FULL_NAME, NAME_COLUMN_PRODUCT_NAME );
+    private static final String DRILLTHROUGH_QUERY_WITH_CUSTOMER_FULL_NAME =
+        MessageFormat.format(
+            DRILLTHROUGH_QUERY_TEMPLATE, CURRENT_MEMBER_CUSTOMER_FULL_NAME);
+    private static final String DRILLTHROUGH_QUERY_WITH_CUSTOMER_ID =
+        MessageFormat.format(
+            DRILLTHROUGH_QUERY_TEMPLATE, CURRENT_MEMBER_CUSTOMER_ID);
+
+    // Schemas contained Levels with and without nameColumn attribute.
+    private static final String NAME_COLUMN_FULL_NAME =
+        " nameColumn=\"fullname\" ";
+    private static final String NAME_COLUMN_PRODUCT_NAME =
+        " nameColumn=\"product_name\" ";
+
+    private static final String SALES_ONLY_TEMPLATE =
+        "<Schema name=\"FoodMartSalesOnly\">\n"
+        + " <Cube name=\"SalesShort\">\n"
+        + "   <Table name=\"sales_fact_1997\"/>\n"
+        + "   <Dimension name=\"Customers Dimension\" foreignKey=\"customer_id\">\n"
+        + "     <Hierarchy hasAll=\"true\" allMemberName=\"All Customers hierarchy name\" primaryKey=\"customer_id\">\n"
+        + "       <Table name=\"customer\"/>\n"
+        + "       <Level name=\"Customer Level Name\" caption=\"Customer Level Caption\" description=\"Customer Level Description\" column=\"customer_id\"{0}type=\"String\" uniqueMembers=\"true\" />\n"
+        + "     </Hierarchy>\n"
+        + "   </Dimension>\n"
+        + "   <Dimension name=\"Product Dimension\" foreignKey=\"product_id\">\n"
+        + "     <Hierarchy hasAll=\"true\" allMemberName=\"All products hierarchy name\" primaryKey=\"product_id\">\n"
+        + "       <Table name=\"product\"/>\n"
+        + "       <Level name=\"Product Level Name\" caption=\"Product Level Caption\" description=\"Product Level Description\" column=\"product_id\"{1}type=\"String\" uniqueMembers=\"true\" />\n"
+        + "     </Hierarchy>\n"
+        + "   </Dimension>\n"
+        + "   <Measure name=\"Store Sales\" column=\"store_sales\" aggregator=\"sum\" formatString=\"#,###.00\"/>\n"
+        + " </Cube>\n"
+        + "</Schema>\n";
+
+    private static final String SALES_ONLY_WITHOUT_NAME_COLUMN =
+        MessageFormat.format(SALES_ONLY_TEMPLATE, " ", " ");
+    private static final String SALES_ONLY_WITH_NAME_COLUMN =
+        MessageFormat.format(
+            SALES_ONLY_TEMPLATE,
+            NAME_COLUMN_FULL_NAME,
+            NAME_COLUMN_PRODUCT_NAME);
 
     // ~ Tests ================================================================
 
@@ -840,6 +861,150 @@ public class DrillThroughTest extends FoodMartTestCase {
                 : "`time_by_day`.`the_year` ASC, `store_ragged`.`store_id` ASC, `store`.`store_id` ASC");
 
         getTestContext().assertSqlEquals(expectedSql, sql, 0);
+    }
+
+    public void testDrillThroughDupKeysAndMeasure() throws Exception {
+        if (!getTestContext().getDialect().getDatabaseProduct()
+            .equals(Dialect.DatabaseProduct.MYSQL))
+        {
+            // This test only works on MySQL because we
+            // check the SQL generated by drillthrough.
+            return;
+        }
+        TestContext testContext = TestContext.instance().withSchema(
+            "<Schema name=\"dsad\">\n"
+            + "  <Dimension name=\"Frozen sqft\">\n"
+            + "    <Hierarchy hasAll=\"true\">\n"
+            + "      <Table name=\"store\" schema=\"foodmart\"/>\n"
+            + "      <Level name=\"Frozen sqft\" uniqueMembers=\"false\" column=\"frozen_sqft\" type=\"Numeric\">\n"
+            + "      </Level>\n"
+            + "    </Hierarchy>\n"
+            + "  </Dimension>\n"
+            + "  <Dimension name=\"Grocery sqft\">\n"
+            + "    <Hierarchy hasAll=\"true\">\n"
+            + "      <Table name=\"store\" schema=\"foodmart\"/>\n"
+            + "      <Level name=\"Grocery sqft\" uniqueMembers=\"false\" column=\"grocery_sqft\" type=\"Numeric\">\n"
+            + "      </Level>\n"
+            + "    </Hierarchy>\n"
+            + "  </Dimension>\n"
+            + "  <Dimension name=\"Meat sqft\">\n"
+            + "    <Hierarchy hasAll=\"true\">\n"
+            + "      <Table name=\"store\" schema=\"foodmart\"/>\n"
+            + "      <Level name=\"Meat sqft\" uniqueMembers=\"false\" column=\"meat_sqft\" type=\"Numeric\">\n"
+            + "      </Level>\n"
+            + "    </Hierarchy>\n"
+            + "  </Dimension>\n"
+            + "  <Dimension name=\"Store sqft\">\n"
+            + "    <Hierarchy hasAll=\"true\">\n"
+            + "      <Table name=\"store\" schema=\"foodmart\"/>\n"
+            + "      <Level name=\"Store sqft\" uniqueMembers=\"false\" column=\"store_sqft\" type=\"Numeric\">\n"
+            + "      </Level>\n"
+            + "    </Hierarchy>\n"
+            + "  </Dimension>\n"
+            + "  <Cube name=\"dsad\">\n"
+            + "    <Table name=\"store\" schema=\"foodmart\"/>\n"
+            + "    <DimensionUsage name=\"Frozen sqft\" source=\"Frozen sqft\"/>\n"
+            + "    <DimensionUsage name=\"Grocery sqft\" source=\"Grocery sqft\"/>\n"
+            + "    <DimensionUsage name=\"Meat sqft\" source=\"Meat sqft\"/>\n"
+            + "    <DimensionUsage name=\"Store sqft\" source=\"Store sqft\"/>\n"
+            + "    <Measure name=\"Frozen sqft\" column=\"frozen_sqft\" aggregator=\"sum\"/>\n"
+            + "    <Measure name=\"Grocery sqft\" column=\"grocery_sqft\" aggregator=\"sum\"/>\n"
+            + "    <Measure name=\"Meat sqft\" column=\"meat_sqft\" aggregator=\"sum\"/>\n"
+            + "    <Measure name=\"Store sqft\" column=\"store_sqft\" aggregator=\"sum\"/>\n"
+            + "  </Cube>\n"
+            + "</Schema>\n");
+
+       final Result result = testContext.executeQuery(
+           "WITH\n"
+           + "SET [*NATIVE_CJ_SET] AS 'FILTER([Frozen sqft].[Frozen sqft].MEMBERS, NOT ISEMPTY ([Measures].[Store sqft]))'\n"
+           + "SET [*SORTED_ROW_AXIS] AS 'ORDER([*CJ_ROW_AXIS],[Frozen sqft].CURRENTMEMBER.ORDERKEY,BASC)'\n"
+           + "SET [*BASE_MEMBERS__Measures_] AS '{[Measures].[Store sqft]}'\n"
+           + "SET [*BASE_MEMBERS__Frozen sqft_] AS '[Frozen sqft].[Frozen sqft].MEMBERS'\n"
+           + "SET [*CJ_ROW_AXIS] AS 'GENERATE([*NATIVE_CJ_SET], {([Frozen sqft].CURRENTMEMBER)})'\n"
+           + "SELECT\n"
+           + "FILTER([*BASE_MEMBERS__Measures_],([Measures].CurrentMember Is [Measures].[Store sqft])) ON COLUMNS\n"
+           + ",FILTER( [*SORTED_ROW_AXIS],([Frozen sqft].CurrentMember Is [Frozen sqft].[2452])) ON ROWS\n"
+           + "FROM [dsad]");
+
+       final String sql =
+           result.getCell(new int[]{0, 0}).getDrillThroughSQL(true);
+
+       testContext.assertSqlEquals(
+           "select store.frozen_sqft as Frozen sqft, store.grocery_sqft as Grocery sqft, store.meat_sqft as Meat sqft, store.store_sqft as Store sqft, store.store_sqft as Store sqft_0 from foodmart.store as store where store.frozen_sqft = 2452 order by store.frozen_sqft ASC, store.grocery_sqft ASC, store.meat_sqft ASC, store.store_sqft ASC",
+           sql,
+           1);
+   }
+
+    public void testDrillThroughDupKeysAndMeasure_2() throws Exception {
+        TestContext testContext = TestContext.instance().withSchema(
+            "<Schema name=\"dsad\">\n"
+            + "  <Dimension name=\"Frozen sqft\">\n"
+            + "    <Hierarchy hasAll=\"true\">\n"
+            + "      <Table name=\"store\" schema=\"foodmart\"/>\n"
+            + "      <Level name=\"Frozen sqft\" uniqueMembers=\"false\" column=\"frozen_sqft\" type=\"Numeric\">\n"
+            + "      </Level>\n"
+            + "    </Hierarchy>\n"
+            + "  </Dimension>\n"
+            + "  <Dimension name=\"Grocery sqft\">\n"
+            + "    <Hierarchy hasAll=\"true\">\n"
+            + "      <Table name=\"store\" schema=\"foodmart\"/>\n"
+            + "      <Level name=\"Grocery sqft\" uniqueMembers=\"false\" column=\"grocery_sqft\" type=\"Numeric\">\n"
+            + "      </Level>\n"
+            + "    </Hierarchy>\n"
+            + "  </Dimension>\n"
+            + "  <Dimension name=\"Meat sqft\">\n"
+            + "    <Hierarchy hasAll=\"true\">\n"
+            + "      <Table name=\"store\" schema=\"foodmart\"/>\n"
+            + "      <Level name=\"Meat sqft\" uniqueMembers=\"false\" column=\"meat_sqft\" type=\"Numeric\">\n"
+            + "      </Level>\n"
+            + "    </Hierarchy>\n"
+            + "  </Dimension>\n"
+            + "  <Dimension name=\"Store sqft\">\n"
+            + "    <Hierarchy hasAll=\"true\">\n"
+            + "      <Table name=\"store\" schema=\"foodmart\"/>\n"
+            + "      <Level name=\"Store sqft\" uniqueMembers=\"false\" column=\"store_sqft\" type=\"Numeric\">\n"
+            + "      </Level>\n"
+            + "    </Hierarchy>\n"
+            + "  </Dimension>\n"
+            + "  <Cube name=\"dsad\">\n"
+            + "    <Table name=\"store\" schema=\"foodmart\"/>\n"
+            + "    <DimensionUsage name=\"Frozen sqft\" source=\"Frozen sqft\"/>\n"
+            + "    <DimensionUsage name=\"Grocery sqft\" source=\"Grocery sqft\"/>\n"
+            + "    <DimensionUsage name=\"Meat sqft\" source=\"Meat sqft\"/>\n"
+            + "    <DimensionUsage name=\"Store sqft\" source=\"Store sqft\"/>\n"
+            + "    <Measure name=\"Frozen sqft\" column=\"frozen_sqft\" aggregator=\"sum\"/>\n"
+            + "    <Measure name=\"Grocery sqft\" column=\"grocery_sqft\" aggregator=\"sum\"/>\n"
+            + "    <Measure name=\"Meat sqft\" column=\"meat_sqft\" aggregator=\"sum\"/>\n"
+            + "    <Measure name=\"Store sqft\" column=\"store_sqft\" aggregator=\"sum\"/>\n"
+            + "  </Cube>\n"
+            + "</Schema>\n");
+        String drillThroughMdx =
+            "DRILLTHROUGH WITH\n"
+            + "SET [*NATIVE_CJ_SET] AS 'FILTER([Store sqft].[Store sqft].MEMBERS, NOT ISEMPTY ([Measures].[Meat sqft]))'\n"
+            + "SET [*SORTED_ROW_AXIS] AS 'ORDER([*CJ_ROW_AXIS],[Store sqft].CURRENTMEMBER.ORDERKEY,BASC)'\n"
+            + "SET [*BASE_MEMBERS__Measures_] AS '{[Measures].[Store sqft]}'\n"
+            + "SET [*BASE_MEMBERS__Store sqft_] AS '[Store sqft].[Store sqft].MEMBERS'\n"
+            + "SET [*CJ_ROW_AXIS] AS 'GENERATE([*NATIVE_CJ_SET], {([Store sqft].CURRENTMEMBER)})'\n"
+            + "SELECT\n"
+            + " [Measures].[Meat sqft] ON COLUMNS\n"
+            + ", [*SORTED_ROW_AXIS]  ON ROWS\n"
+            + "FROM [dsad] WHERE ( [Grocery Sqft].[24390] ) RETURN [Store sqft].[Store sqft], [Measures].[Grocery sqft]";
+        OlapConnection olap4jConnection = testContext.getOlap4jConnection();
+        ResultSet resultSet = null;
+        try {
+            resultSet = olap4jConnection.createStatement()
+                .executeQuery(drillThroughMdx);
+            assertEquals(2, resultSet.getMetaData().getColumnCount());
+            assertEquals
+                ("Store sqft", resultSet.getMetaData().getColumnLabel(1));
+            assertEquals
+                ("Grocery sqft", resultSet.getMetaData().getColumnLabel(2));
+        } finally {
+            if (resultSet != null) {
+                resultSet.close();
+            }
+            olap4jConnection.close();
+        }
     }
 
     /**
@@ -1774,19 +1939,22 @@ public class DrillThroughTest extends FoodMartTestCase {
             TestContext.instance().withSchema(SALES_ONLY_WITH_NAME_COLUMN);
         try {
             rs = testContext.executeStatement(
-                    DRILLTHROUGH_QUERY_WITH_CUSTOMER_FULL_NAME);
+                DRILLTHROUGH_QUERY_WITH_CUSTOMER_FULL_NAME);
             assertEquals(
                 5, rs.getMetaData().getColumnCount());
             assertEquals(
-                    "Customer Level Name", rs.getMetaData().getColumnLabel(1));
+                "Customer Level Name", rs.getMetaData().getColumnLabel(1));
             assertEquals(
-                    "Customer Level Name (Key)", rs.getMetaData().getColumnLabel(2));
+                "Customer Level Name (Key)",
+                rs.getMetaData().getColumnLabel(2));
             assertEquals(
-                    "Product Level Name", rs.getMetaData().getColumnLabel(3));
+                "Product Level Name",
+                rs.getMetaData().getColumnLabel(3));
             assertEquals(
-                    "Product Level Name (Key)", rs.getMetaData().getColumnLabel(4));
+                "Product Level Name (Key)",
+                rs.getMetaData().getColumnLabel(4));
             assertEquals(
-                    "Store Sales", rs.getMetaData().getColumnLabel(5));
+                "Store Sales", rs.getMetaData().getColumnLabel(5));
 
             while (rs.next()) {
                 assertEquals(
@@ -1799,15 +1967,15 @@ public class DrillThroughTest extends FoodMartTestCase {
                     "Should be a non-null value for product name",
                     rs.getObject(3));
                 assertNotNull(
-                        "Should be a non-null value for product key",
+                    "Should be a non-null value for product key",
                         rs.getObject(4));
                 assertNotNull(
-                        "Should be a non-null value for store sales",
+                    "Should be a non-null value for store sales",
                         rs.getObject(5));
             }
             rs.last();
             assertEquals(
-                    17, rs.getRow());
+                17, rs.getRow());
         } finally {
             if (rs != null) {
                 rs.close();
@@ -1820,33 +1988,82 @@ public class DrillThroughTest extends FoodMartTestCase {
     {
         ResultSet rs = null;
         final TestContext testContext =
-                TestContext.instance().withSchema(SALES_ONLY_WITHOUT_NAME_COLUMN);
+                TestContext.instance().withSchema(
+                    SALES_ONLY_WITHOUT_NAME_COLUMN);
         try {
             rs = testContext.executeStatement(
-                    DRILLTHROUGH_QUERY_WITH_CUSTOMER_ID);
+                DRILLTHROUGH_QUERY_WITH_CUSTOMER_ID);
             assertEquals(
-                    3, rs.getMetaData().getColumnCount());
+                3, rs.getMetaData().getColumnCount());
             assertEquals(
-                    "Customer Level Name", rs.getMetaData().getColumnLabel(1));
+                "Customer Level Name", rs.getMetaData().getColumnLabel(1));
             assertEquals(
-                    "Product Level Name", rs.getMetaData().getColumnLabel(2));
+                "Product Level Name", rs.getMetaData().getColumnLabel(2));
             assertEquals(
-                    "Store Sales", rs.getMetaData().getColumnLabel(3));
+                "Store Sales", rs.getMetaData().getColumnLabel(3));
 
             while (rs.next()) {
                 assertEquals(
-                        "Each customer key should be 3",
+                    "Each customer key should be 3",
                         3, rs.getObject(1));
                 assertNotNull(
-                        "Should be a non-null value for product key",
+                    "Should be a non-null value for product key",
                         rs.getObject(2));
                 assertNotNull(
-                        "Should be a non-null value for store sales",
+                    "Should be a non-null value for store sales",
                         rs.getObject(3));
             }
             rs.last();
             assertEquals(
-                    17, rs.getRow());
+                17, rs.getRow());
+        } finally {
+            if (rs != null) {
+                rs.close();
+            }
+        }
+    }
+    /**
+    * Testcase for bug
+    * <a href="http://jira.pentaho.com/browse/MONDRIAN-2551">MONDRIAN-2551,
+    * "Drill-through filtering not working properly
+    * when level is used as filter"</a>.
+    */
+    public void testMultipleFilterByLevel_NoDuplicatedColumnsInResult()
+        throws SQLException
+    {
+        String[] expectedColumnValues = {"Gourmet Supermarket",
+          "Small Grocery"};
+        Set<String> expectedValues =
+            new HashSet<String>(Arrays.asList(expectedColumnValues));
+        int expectedRowCount = 10859;
+        ResultSet rs = null;
+        try {
+            rs = getTestContext().executeStatement(
+                "DRILLTHROUGH \n"
+                + "WITH\n"
+                + "SET [*NATIVE_CJ_SET_WITH_SLICER] AS 'FILTER({[Store Type].[All Store Types].[Gourmet Supermarket],[Store Type].[All Store Types].[Small Grocery]}, NOT ISEMPTY ([Measures].[Store Sales]))'\n"
+                + "SET [*NATIVE_CJ_SET] AS '[*NATIVE_CJ_SET_WITH_SLICER]'\n"
+                + "SET [*BASE_MEMBERS__Store Type_] AS '{[Store Type].[All Store Types].[Gourmet Supermarket],[Store Type].[All Store Types].[Small Grocery]}'\n"
+                + "SET [*BASE_MEMBERS__Measures_] AS '{[Measures].[*FORMATTED_MEASURE_0]}'\n"
+                + "SET [*CJ_SLICER_AXIS] AS 'GENERATE([*NATIVE_CJ_SET_WITH_SLICER], {([Store Type].CURRENTMEMBER)})'\n"
+                + "MEMBER [Measures].[*FORMATTED_MEASURE_0] AS '[Measures].[Store Sales]', FORMAT_STRING = '#,###.00', SOLVE_ORDER=500\n"
+                + "SELECT\n"
+                + "FILTER([*BASE_MEMBERS__Measures_],([Measures].CurrentMember Is [Measures].[*FORMATTED_MEASURE_0])) ON COLUMNS\n"
+                + "FROM [Sales]\n"
+                + "WHERE ([*CJ_SLICER_AXIS]) RETURN [Store Type].[Store Type]");
+            assertEquals(
+                "This DRILLTHROUGH Result should contain only one column - ",
+                1, rs.getMetaData().getColumnCount());
+            assertEquals(
+                "Store Type", rs.getMetaData().getColumnLabel(1));
+            while (rs.next()) {
+                assertTrue(
+                    "Store Type in results should be either Small Grocery or Gourmet Supermarket",
+                    expectedValues.contains(rs.getObject(1)));
+            }
+            rs.last();
+            assertEquals(
+                expectedRowCount, rs.getRow());
         } finally {
             if (rs != null) {
                 rs.close();

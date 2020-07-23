@@ -5,7 +5,7 @@
 // You must accept the terms of that agreement to use this software.
 //
 // Copyright (C) 2003-2005 Julian Hyde
-// Copyright (C) 2005-2017 Hitachi Vantara
+// Copyright (C) 2005-2018 Hitachi Vantara
 // All Rights Reserved.
 */
 package mondrian.xmla;
@@ -2022,6 +2022,7 @@ public class XmlaHandler {
                 "name", axisName);
 
             List<Hierarchy> hierarchies;
+            List<Property> props = new ArrayList<>(getProps(axis.getAxisMetaData()));
             Iterator<org.olap4j.Position> it = axis.getPositions().iterator();
             if (it.hasNext()) {
                 final org.olap4j.Position position = it.next();
@@ -2032,12 +2033,29 @@ public class XmlaHandler {
             } else {
                 hierarchies = axis.getAxisMetaData().getHierarchies();
             }
-            List<Property> props = getProps(axis.getAxisMetaData());
+
+            // remove a property without a valid associated hierarchy
+            props.removeIf(prop -> !isValidProp(axis.getPositions(), prop));
+
             writeHierarchyInfo(writer, hierarchies, props);
 
             writer.endElement(); // AxisInfo
 
             return hierarchies;
+        }
+
+        private boolean isValidProp(List<Position> positions, Property prop) {
+            if(!(prop instanceof IMondrianOlap4jProperty)){
+                return true;
+            }
+
+            for (Position pos : positions){
+                if(pos.getMembers().stream()
+                        .anyMatch(member -> Objects.nonNull(getHierarchyProperty(member, prop)))){
+                    return true;
+                }
+            }
+            return false;
         }
 
         private void writeHierarchyInfo(
@@ -2110,6 +2128,12 @@ public class XmlaHandler {
             switch (datatype) {
             case UNSIGNED_INTEGER:
                 return RowsetDefinition.Type.UnsignedInteger.columnType;
+            case DOUBLE:
+                return RowsetDefinition.Type.Double.columnType;
+            case LARGE_INTEGER:
+                return RowsetDefinition.Type.Long.columnType;
+            case INTEGER:
+                return RowsetDefinition.Type.Integer.columnType;
             case BOOLEAN:
                 return RowsetDefinition.Type.Boolean.columnType;
             default:
@@ -2278,7 +2302,7 @@ public class XmlaHandler {
                     value = member.getDepth();
                 } else {
                     value = (longProp instanceof IMondrianOlap4jProperty)
-                        ? getCurrentHierarchyProperty(member, longProp)
+                        ? getHierarchyProperty(member, longProp)
                         : member.getPropertyValue(longProp);
                 }
                 if (value != null) {
@@ -2288,8 +2312,8 @@ public class XmlaHandler {
             writer.endElement(); // Member
         }
 
-        private Object getCurrentHierarchyProperty(
-            Member member, Property longProp) throws OlapException
+        private Object getHierarchyProperty(
+            Member member, Property longProp)
         {
             IMondrianOlap4jProperty currentProperty =
                 (IMondrianOlap4jProperty) longProp;
@@ -2297,7 +2321,15 @@ public class XmlaHandler {
             String thatHierarchyName = currentProperty.getLevel()
                 .getHierarchy().getName();
             if (thisHierarchyName.equals(thatHierarchyName)) {
-                return member.getPropertyValue(currentProperty);
+                try {
+                    return member.getPropertyValue(currentProperty);
+                } catch (OlapException e) {
+                    throw new XmlaException(
+                            SERVER_FAULT_FC,
+                            HSB_BAD_PROPERTIES_LIST_CODE,
+                            HSB_BAD_PROPERTIES_LIST_FAULT_FS,
+                            e);
+                }
             }
             // if property doesn't belong to current hierarchy return null
             return null;
@@ -3142,6 +3174,16 @@ public class XmlaHandler {
          * Returns the ordering key for a given member.
          */
         Object getOrderKey(Member m) throws OlapException;
+
+        /**
+         * Returns the data type of the level's key.
+         * 
+         * @param level
+         * @return String|Numeric|Integer|Boolean|Date|Time|Timestamp
+         */
+        default public String getLevelDataType( Level level ) {
+          return null;
+        }
 
         class FunctionDefinition {
             public final String functionName;

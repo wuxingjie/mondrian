@@ -7,7 +7,7 @@
   == You must accept the terms of that agreement to use this software.
   ==
   == Copyright (C) 2001-2005 Julian Hyde
-  == Copyright (C) 2005-2017 Hitachi Vantara and others
+  == Copyright (C) 2005-2019 Hitachi Vantara and others
   == All Rights Reserved.
   ==
   == This file defines an MMM schema for an Olap schema.
@@ -908,6 +908,7 @@ Revision is $Id$
             <Value>String</Value>
             <Value>Numeric</Value>
             <Value>Integer</Value>
+            <Value>Long</Value>
             <Value>Boolean</Value>
             <Value>Date</Value>
             <Value>Time</Value>
@@ -1354,19 +1355,33 @@ Revision is $Id$
                 <li>db2</li>
                 <li>derby</li>
                 <li>firebird</li>
+                <li>googlebigquery</li>
+                <li>greenplum</li>
                 <li>hsqldb</li>
+                <li>hive</li>
+                <li>impala</li>
+                <li>infobright</li>
+                <li>informix</li>
+                <li>ingres</li>
+                <li>interbase</li>
+                <li>luciddb</li>
+                <li>mariadb</li>
+                <li>monetdb</li>
                 <li>mssql</li>
                 <li>mysql</li>
+                <li>neoview</li>
+                <li>netezza</li>
                 <li>nuodb</li>
                 <li>oracle</li>
+                <li>pdi</li>
                 <li>postgres</li>
+                <li>redshift</li>
+                <li>snowflake</li>
+                <li>sqlstream</li>
                 <li>sybase</li>
                 <li>teradata</li>
-                <li>ingres</li>
-                <li>infobright</li>
-                <li>luciddb</li>
+                <li>vectorwise</li>
                 <li>vertica</li>
-                <li>neoview</li>
                 </ul>
             </Doc>
         </Attribute>

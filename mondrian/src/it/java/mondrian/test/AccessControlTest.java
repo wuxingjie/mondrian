@@ -5,7 +5,7 @@
 // You must accept the terms of that agreement to use this software.
 //
 // Copyright (C) 2003-2005 Julian Hyde
-// Copyright (C) 2005-2017 Hitachi Vantara
+// Copyright (C) 2005-2018 Hitachi Vantara
 // All Rights Reserved.
 */
 package mondrian.test;
@@ -133,6 +133,113 @@ public class AccessControlTest extends FoodMartTestCase {
             + "{[Measures].[Unit Sales]}\n"
             + "Row #0: 266,773\n");
     }
+
+    /**Test for
+     * <a href="http://jira.pentaho.com/browse/MONDRIAN-2603">MONDRIAN-2603</a>
+     */
+    public void testRestrictMeasuresHierarchy_InTwoRoles() {
+      String schema =
+          "<Schema name=\"FoodMart.DimAndMeasure.Role\">\n"
+          + " <Dimension name=\"WarehouseShared\">\n"
+          + "   <Hierarchy hasAll=\"true\" primaryKey=\"warehouse_id\">\n"
+          + "     <Table name=\"warehouse\"/>\n"
+          + "     <Level name=\"Country\" column=\"warehouse_country\" uniqueMembers=\"true\"/>\n"
+          + "     <Level name=\"State Province\" column=\"warehouse_state_province\"\n"
+          + "          uniqueMembers=\"true\"/>\n"
+          + "     <Level name=\"City\" column=\"warehouse_city\" uniqueMembers=\"false\"/>\n"
+          + "     <Level name=\"Warehouse Name\" column=\"warehouse_name\" uniqueMembers=\"true\"/>\n"
+          + "   </Hierarchy>\n"
+          + " </Dimension>\n"
+          + " <Cube name=\"Warehouse1\">\n"
+          + "   <Table name=\"inventory_fact_1997\"/>\n"
+          + "   <DimensionUsage name=\"WarehouseShared\" source=\"WarehouseShared\" foreignKey=\"warehouse_id\"/>\n"
+          + "   <Measure name=\"Measure1_0\" column=\"warehouse_cost\" aggregator=\"sum\"/>\n"
+          + "   <Measure name=\"Measure1_1\" column=\"warehouse_sales\" aggregator=\"sum\"/>\n"
+          + "   <CalculatedMember name=\"Calculated Measure1\" dimension=\"Measures\">\n"
+          + "     <Formula>[Measures].[Measure1_1] / [Measures].[Measure1_0]</Formula>\n"
+          + "     <CalculatedMemberProperty name=\"FORMAT_STRING\" value=\"$#,##0.00\"/>\n"
+          + "   </CalculatedMember>\n"
+          + " </Cube>\n"
+          + " <Cube name=\"Warehouse2\">\n"
+          + "   <Table name=\"inventory_fact_1997\"/>\n"
+          + "   <DimensionUsage name=\"WarehouseShared\" source=\"WarehouseShared\" foreignKey=\"warehouse_id\"/>\n"
+          + "   <Measure name=\"Measure2_0\" column=\"warehouse_cost\" aggregator=\"sum\"/>\n"
+          + "   <Measure name=\"Measure2_1\" column=\"warehouse_sales\" aggregator=\"sum\"/>\n"
+          + "   <CalculatedMember name=\"Calculated Measure2\" dimension=\"Measures\">\n"
+          + "     <Formula>[Measures].[Measure2_1] / [Measures].[Measure2_0]</Formula>\n"
+          + "     <CalculatedMemberProperty name=\"FORMAT_STRING\" value=\"$#,##0.00\"/>\n"
+          + "   </CalculatedMember>\n"
+          + " </Cube>\n"
+          + " <Role name=\"Administrator\">\n"
+          + "   <SchemaGrant access=\"none\">\n"
+          + "     <CubeGrant cube=\"Warehouse1\" access=\"custom\">\n"
+          + "       <HierarchyGrant hierarchy=\"[WarehouseShared]\" access=\"all\">\n"
+          + "       </HierarchyGrant>\n"
+          + "       <HierarchyGrant hierarchy=\"[Measures]\" access=\"all\">\n"
+          + "       </HierarchyGrant>\n"
+          + "     </CubeGrant>\n"
+          + "     <CubeGrant cube=\"Warehouse2\" access=\"custom\">\n"
+          + "       <HierarchyGrant hierarchy=\"[WarehouseShared]\" access=\"all\">\n"
+          + "       </HierarchyGrant>\n"
+          + "       <HierarchyGrant hierarchy=\"[Measures]\" access=\"all\">\n"
+          + "       </HierarchyGrant>\n"
+          + "     </CubeGrant>\n"
+          + "   </SchemaGrant>\n"
+          + " </Role>\n"
+          + "</Schema>";
+      TestContext testContext = TestContext.instance()
+          .withFreshConnection().withRole("Administrator")
+          .withSchema(schema);
+
+      final TestContext cube2 = testContext.withCube("Warehouse2");
+      final TestContext cube1 = testContext.withCube("Warehouse1");
+
+      try {
+      cube2.assertQueryReturns(
+          "SELECT {[Measures].Members} ON COLUMNS FROM [Warehouse2]",
+          "Axis #0:\n"
+          + "{}\n"
+          + "Axis #1:\n"
+          + "{[Measures].[Measure2_0]}\n"
+          + "{[Measures].[Measure2_1]}\n"
+          + "{[Measures].[Fact Count]}\n"
+          + "Row #0: 89,043.253\n"
+          + "Row #0: 196,770.888\n"
+          + "Row #0: 4,070\n");
+      } catch (MondrianException e) {
+        if (e.getCause().getLocalizedMessage()
+            .contains(
+                "MDX object '[Measures]' not found in cube 'Warehouse2'"))
+        {
+          fail(
+              "[Measures] should be displayed in 'Warehouse2' cube but they are not! ");
+        }
+        throw e;
+      }
+
+      try {
+      cube1.assertQueryReturns(
+          "SELECT {[Measures].Members} ON COLUMNS FROM [Warehouse1]",
+          "Axis #0:\n"
+          + "{}\n"
+          + "Axis #1:\n"
+          + "{[Measures].[Measure1_0]}\n"
+          + "{[Measures].[Measure1_1]}\n"
+          + "{[Measures].[Fact Count]}\n"
+          + "Row #0: 89,043.253\n"
+          + "Row #0: 196,770.888\n"
+          + "Row #0: 4,070\n");
+      } catch (MondrianException e) {
+        if (e.getCause().getLocalizedMessage()
+            .contains(
+                "MDX object '[Measures]' not found in cube 'Warehouse1'"))
+        {
+          fail(
+              "[Measures] should be displayed in 'Warehouse1' cube but they are not! ");
+        }
+        throw e;
+      }
+  }
 
     public void testRestrictLevelsAnalyzer3283() {
         String dimensionsDef =
@@ -639,12 +746,15 @@ public class AccessControlTest extends FoodMartTestCase {
 
     public void testBugMondrian_2586_RaggedDimMembersShouldBeVisible() {
       String raggedUser =
-              "<Role name=\"Sales Ragged\">\n"
-            + "  <SchemaGrant access=\"none\">\n"
-            + "    <CubeGrant cube=\"Sales Ragged\" access=\"all\" />\n"
-            + "  </SchemaGrant>\n"
-            + "</Role>";
-    final TestContext raggedSales = TestContext.instance().create( null, null, null, null, null, raggedUser ).withRole( "Sales Ragged" );
+          "<Role name=\"Sales Ragged\">\n"
+          + "  <SchemaGrant access=\"none\">\n"
+          + "    <CubeGrant cube=\"Sales Ragged\" access=\"all\" />\n"
+          + "  </SchemaGrant>\n"
+          + "</Role>";
+    final TestContext raggedSales =
+            TestContext.instance()
+                .create(null, null, null, null, null, raggedUser)
+                .withRole("Sales Ragged");
     //[Geography].[Country]
     raggedSales.assertQueryReturns(
         "select {[Measures].[Unit Sales]} ON COLUMNS, {[Geography].[Country].MEMBERS} ON ROWS from [Sales Ragged]",
@@ -1492,6 +1602,58 @@ public class AccessControlTest extends FoodMartTestCase {
             + "Row #0: 3,583\n"
             + "Row #0: 124,366\n");
         checkQuery(testContext.withRole("Role1,Role2"), mdx);
+    }
+
+    public void testUnionOfUnionRole() {
+        String roleDefs =
+            "<Role name=\"USA manager\">\n"
+            + "  <SchemaGrant access=\"none\">\n"
+            + "    <CubeGrant cube=\"Sales\" access=\"all\">\n"
+            + "      <DimensionGrant access=\"all\" dimension=\"[Measures]\"/>\n"
+            + "      <HierarchyGrant access=\"custom\" hierarchy=\"[Customers]\">\n"
+            + "        <MemberGrant access=\"all\" member=\"[Customers].[USA]\"/>\n"
+            + "      </HierarchyGrant>\n"
+            + "    </CubeGrant>\n"
+            + "  </SchemaGrant>\n"
+            + "</Role>\n"
+            + "<Role name=\"parent of USA manager\">\n"
+            + "  <Union>\n"
+            + "    <RoleUsage roleName=\"USA manager\"/>\n"
+            + "  </Union>\n"
+            + "</Role>"
+            + "<Role name=\"grandparent of USA manager\">\n"
+            + "  <Union>\n"
+            + "    <RoleUsage roleName=\"parent of USA manager\"/>\n"
+            + "  </Union>\n"
+            + "</Role>";
+
+        final TestContext testContext =
+                TestContext.instance()
+                        .create(null, null, null, null, null, roleDefs);
+
+        Connection connection =
+                testContext.withRole("grandparent of USA manager")
+                        .getConnection();
+
+        // Can access [Sales]?
+        assertCubeAccess(connection, Access.ALL, "Sales");
+
+        // Has custom access to [Customers]?
+        assertHierarchyAccess
+                (connection, Access.CUSTOM, "Sales", "[Customers]");
+
+        final Role.HierarchyAccess hierarchyAccess =
+                getHierarchyAccess(connection, "Sales", "[Customers]");
+
+        // Can access all levels of the [Customers] hierarchy?
+        assertEquals(0, hierarchyAccess.getTopLevelDepth());
+        assertEquals(4, hierarchyAccess.getBottomLevelDepth());
+
+        // Can see [USA]?
+        assertMemberAccess(connection, Access.ALL, "[Customers].[USA]");
+
+        // Cannot see [Mexico]?
+        assertMemberAccess(connection, Access.NONE, "[Customers].[Mexico]");
     }
 
     /**

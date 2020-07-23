@@ -5,11 +5,30 @@
 // You must accept the terms of that agreement to use this software.
 //
 // Copyright (C) 2003-2005 Julian Hyde
-// Copyright (C) 2005-2017 Hitachi Vantara and others
+// Copyright (C) 2005-2020 Hitachi Vantara and others
 // All Rights Reserved.
 */
 package mondrian.rolap;
 
+import static org.mockito.Matchers.anyBoolean;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.mockito.Mockito;
+
+import junit.framework.Assert;
 import mondrian.calc.TupleIterable;
 import mondrian.calc.TupleList;
 import mondrian.calc.impl.AbstractTupleCursor;
@@ -35,25 +54,13 @@ import mondrian.olap.type.DecimalType;
 import mondrian.olap.type.NullType;
 import mondrian.olap.type.TupleType;
 import mondrian.olap.type.Type;
+import mondrian.rolap.aggmatcher.AggStar;
+import mondrian.rolap.sql.SqlQuery;
 import mondrian.server.Execution;
+import mondrian.spi.Dialect;
+import mondrian.spi.DialectManager;
 import mondrian.test.FoodMartTestCase;
 import mondrian.test.TestContext;
-
-import junit.framework.Assert;
-
-import org.mockito.Mockito;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-
-import static org.mockito.Matchers.anyBoolean;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 /**
  * <code>SqlConstraintUtilsTest</code> tests the functions defined in
@@ -427,7 +434,7 @@ public class SqlConstraintUtilsTest extends FoodMartTestCase {
         final RolapEvaluator rolapEvaluator =
             new RolapEvaluator(rolapEvaluatorRoot);
         final Member expectedMember = slicerMember;
-        rolapEvaluator.setSlicerContext(expectedMember);
+        setSlicerContext(rolapEvaluator, expectedMember);
 
         RolapResult.CompoundSlicerRolapMember placeHolderMember =
             Mockito.mock(RolapResult.CompoundSlicerRolapMember.class);
@@ -642,7 +649,7 @@ public class SqlConstraintUtilsTest extends FoodMartTestCase {
       final RolapEvaluator rolapEvaluator =
           new RolapEvaluator(rolapEvaluatorRoot);
       final Member expectedMember = slicerMember;
-      rolapEvaluator.setSlicerContext(expectedMember);
+      setSlicerContext(rolapEvaluator, expectedMember);
 
       RolapResult.CompoundSlicerRolapMember placeHolderMember =
           Mockito.mock(RolapResult.CompoundSlicerRolapMember.class);
@@ -815,6 +822,38 @@ public class SqlConstraintUtilsTest extends FoodMartTestCase {
         when(mock.isParentChildLeaf()).thenReturn(isParentChildLeaf);
         when(mock.getHierarchy()).thenReturn(hierarchy);
         return mock;
+    }
+
+    public void testConstrainLevel(){
+
+        final RolapCubeLevel level = mock( RolapCubeLevel.class);
+        final RolapCube baseCube = mock(RolapCube.class);
+        final RolapStar.Column column = mock(RolapStar.Column.class);
+
+        final TestContext testContext = TestContext.instance();
+        final Connection connection = testContext.getConnection();
+
+        final AggStar aggStar = null;
+        final Dialect dialect =  DialectManager.createDialect(connection.getDataSource(), null);
+        final SqlQuery query = new SqlQuery(dialect);
+
+        when(level.getBaseStarKeyColumn(baseCube)).thenReturn(column);
+        when(column.getNameColumn()).thenReturn(column);
+        when(column.generateExprString(query)).thenReturn("dummyName");
+
+        String[] columnValue = new String[1];
+        columnValue[0] = "dummyValue";
+
+        String levelStr = SqlConstraintUtils.constrainLevel(level, query, baseCube, aggStar, columnValue, false);
+        assertEquals("dummyName = 'dummyValue'",  levelStr);
+    }
+    
+    private void setSlicerContext(RolapEvaluator e, Member m) {
+      List<Member> members = new ArrayList<Member>();
+      members.add( m );
+      Map<Hierarchy, Set<Member>> membersByHierarchy = new HashMap<Hierarchy, Set<Member>>();
+      membersByHierarchy.put( m.getHierarchy(), new HashSet<Member>(members) );
+      e.setSlicerContext( members, membersByHierarchy );
     }
 }
 

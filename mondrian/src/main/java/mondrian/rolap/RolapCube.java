@@ -5,7 +5,7 @@
 // You must accept the terms of that agreement to use this software.
 //
 // Copyright (C) 2001-2005 Julian Hyde
-// Copyright (C) 2005-2017 Hitachi Vantara and others
+// Copyright (C) 2005-2018 Hitachi Vantara and others
 // All Rights Reserved.
 */
 package mondrian.rolap;
@@ -101,6 +101,12 @@ public class RolapCube extends CubeBase {
         new HashMap<RolapLevel, RolapCubeLevel>();
 
     final BitKey closureColumnBitKey;
+
+    /**
+     * Used for virtual cubes.
+     * Contains a list of all base cubes related to a virtual cube
+     */
+    private List<RolapCube> baseCubes;
 
     /**
      * Private constructor used by both normal cubes and virtual cubes.
@@ -492,16 +498,18 @@ public class RolapCube extends CubeBase {
             }
             List<Member> cubeMeasures = cube.getMeasures();
             boolean found = false;
+            boolean isDefaultMeasureFound = false;
             for (Member cubeMeasure : cubeMeasures) {
                 if (cubeMeasure.getUniqueName().equals(xmlMeasure.name)) {
                     if (cubeMeasure.getName().equalsIgnoreCase(
                             xmlVirtualCube.defaultMeasure))
                     {
-                        defaultMeasure = cubeMeasure;
+                      defaultMeasure = cubeMeasure;
+                      isDefaultMeasureFound = true;
                     }
                     found = true;
                     if (cubeMeasure instanceof RolapCalculatedMember) {
-                        // We have a calulated member!  Keep track of which
+                        // We have a calculated member!  Keep track of which
                         // base cube each calculated member is associated
                         // with, so we can resolve the calculated member
                         // relative to its base cube.  We're using a treeMap
@@ -550,6 +558,11 @@ public class RolapCube extends CubeBase {
                             Property.CAPTION.name,
                             cubeMeasure.getCaption());
                         origMeasureList.add(virtualCubeMeasure);
+                        //Set the actual virtual cube measure
+                        //to the default measure
+                        if (isDefaultMeasureFound) {
+                          defaultMeasure = virtualCubeMeasure;
+                        }
                     }
                     break;
                 }
@@ -619,13 +632,15 @@ public class RolapCube extends CubeBase {
         // iterate through a calculated member definitions in a virtual cube
         // retrieve calculated member source cube
         // set it appropriate rolap calculated measure
+        Map<String, RolapHierarchy.RolapCalculatedMeasure> calcMeasuresWithBaseCube =
+                new HashMap<>();
         for (RolapCube rolapCube : calculatedMembersMap.keySet()) {
             List<MondrianDef.CalculatedMember> calculatedMembers =
                     calculatedMembersMap.get(rolapCube);
             for (MondrianDef.CalculatedMember calculatedMember
                     : calculatedMembers)
             {
-                List<Member> measures = this.getMeasures();
+                List<Member> measures = rolapCube.getMeasures();
                 for (Member measure : measures) {
                     if (measure instanceof
                             RolapHierarchy.RolapCalculatedMeasure)
@@ -637,6 +652,8 @@ public class RolapCube extends CubeBase {
                                 .name.equals(calculatedMeasure.getKey()))
                         {
                             calculatedMeasure.setBaseCube(rolapCube);
+                            calcMeasuresWithBaseCube.put(calculatedMeasure.getUniqueName(),
+                                    calculatedMeasure);
                         }
                     }
                 }
@@ -697,8 +714,13 @@ public class RolapCube extends CubeBase {
             finalMeasureMembers.add((RolapMember)measure);
         }
         for (Formula formula : calculatedMemberList) {
-            finalMeasureMembers.add(
-                (RolapMember)formula.getMdxMember());
+            final RolapMember calcMeasure = (RolapMember) formula.getMdxMember();
+            if (calcMeasure instanceof RolapHierarchy.RolapCalculatedMeasure
+                    && calcMeasuresWithBaseCube.containsKey(calcMeasure.getUniqueName())) {
+                ((RolapHierarchy.RolapCalculatedMeasure) calcMeasure)
+                        .setBaseCube(calcMeasuresWithBaseCube.get(calcMeasure.getUniqueName()).getBaseCube());
+            }
+            finalMeasureMembers.add(calcMeasure);
         }
         setMeasuresHierarchyMemberReader(
             new CacheMemberReader(
@@ -1238,7 +1260,7 @@ public class RolapCube extends CubeBase {
     {
         Property prop = Property.lookup(name, false);
         if (prop != null
-            && prop.getType() == Property.Datatype.TYPE_NUMERIC
+            && prop.getType().isNumeric()
             && isSurroundedWithQuotes(expr)
             && expr.length() > 2)
         {
@@ -3155,6 +3177,45 @@ public class RolapCube extends CubeBase {
             },
             new Exp[0],
             calc.getType());
+    }
+
+
+
+    /**Returns the list of base cubes associated with this cube
+     * if this one is a virtual cube,
+     * otherwise return just this cube
+     *
+     * @return the list of base cubes
+     */
+    public List<RolapCube> getBaseCubes() {
+      if (baseCubes == null) {
+        baseCubes = findBaseCubes(this);
+      }
+      return baseCubes;
+    }
+
+    /**
+     * Locates all base cubes associated with the virtual cube.
+     */
+    private static List<RolapCube> findBaseCubes(RolapCube cube) {
+      if (!cube.isVirtual()) {
+        return Collections.singletonList(cube);
+      }
+      List<RolapCube> cubesList = new ArrayList<RolapCube>();
+      Set<RolapCube> cubes = new TreeSet<>(new RolapCube.CubeComparator());
+      for (Member member : cube.getMeasures()) {
+        if (member instanceof RolapStoredMeasure) {
+          cubes.add(((RolapStoredMeasure) member).getCube());
+        } else if (member instanceof RolapHierarchy.RolapCalculatedMeasure) {
+          RolapCube baseCube =
+              ((RolapHierarchy.RolapCalculatedMeasure) member).getBaseCube();
+          if (baseCube != null) {
+            cubes.add(baseCube);
+          }
+        }
+      }
+      cubesList.addAll(cubes);
+      return cubesList;
     }
 }
 

@@ -5,29 +5,29 @@
   <parent>
     <groupId>pentaho</groupId>
     <artifactId>pentaho-mondrian-parent-pom</artifactId>
-    <version>8.0-SNAPSHOT</version>
+    <version>9.1.0.0-SNAPSHOT</version>
   </parent>
   <artifactId>mondrian</artifactId>
-  <version>8.0-SNAPSHOT</version>
+  <version>9.1.0.0-SNAPSHOT</version>
   <name>Pentaho Community Edition Project: ${project.artifactId}</name>
   <description>Mondrian OLAP Engine</description>
   <url>http://mondrian.pentaho.com</url>
   <properties>
-    <project.version.minor>150</project.version.minor>
-    <copyright.year>2017</copyright.year>
-    <xml-apis.version>2.0.2</xml-apis.version>
+    <project.version.minor>000</project.version.minor>
     <driver.version>${project.version}</driver.version>
-    <project.version.major>3</project.version.major>
+    <project.version.major>8</project.version.major>
+    <schema.version>3</schema.version>
     <driver.name>Mondrian olap4j driver</driver.name>
     <driver.version.minor>${project.version.minor}</driver.version.minor>
     <vendor>Pentaho</vendor>
+    <guava.version>17.0</guava.version>
     <driver.version.major>${project.version.major}</driver.version.major>
+    <maven-failsafe-plugin.argLine>-Duser.language=en -Duser.country=US</maven-failsafe-plugin.argLine>
   </properties>
   <dependencies>
     <dependency>
       <groupId>xml-apis</groupId>
       <artifactId>xml-apis</artifactId>
-      <version>${xml-apis.version}</version>
     </dependency>
     <dependency>
       <groupId>commons-collections</groupId>
@@ -52,12 +52,15 @@
     <dependency>
       <groupId>commons-logging</groupId>
       <artifactId>commons-logging</artifactId>
-      <version>${commons-logging.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>${guava.version}</version>
     </dependency>
     <dependency>
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
-      <version>1.2.14</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -73,12 +76,10 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-vfs2</artifactId>
-      <version>${commons-vfs2.version}</version>
     </dependency>
     <dependency>
-      <groupId>dom4j</groupId>
+      <groupId>org.dom4j</groupId>
       <artifactId>dom4j</artifactId>
-      <version>${dom4j.version}</version>
     </dependency>
     <dependency>
       <groupId>javax.validation</groupId>
@@ -119,7 +120,6 @@
     <dependency>
       <groupId>xerces</groupId>
       <artifactId>xercesImpl</artifactId>
-      <version>${xercesImpl.version}</version>
     </dependency>
     <dependency>
       <groupId>javax.servlet</groupId>
@@ -224,7 +224,6 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
-        <version>1.9.1</version>
         <executions>
           <execution>
             <id>add-source</id>
@@ -305,6 +304,7 @@
             </goals>
           </execution>
         </executions>
+
         <configuration>
           <includes>
             <include>Main.java</include>
@@ -364,7 +364,6 @@
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>build-helper-maven-plugin</artifactId>
-            <version>${build-helper-maven-plugin.version}</version>
             <executions>
               <execution>
                 <phase>process-test-sources</phase>
@@ -405,6 +404,24 @@
             </executions>
           </plugin>
           <plugin>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>1.7</version>
+            <executions>
+              <execution>
+                <id>copy-mysql-cnf</id>
+                <phase>pre-integration-test</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <tasks>
+                    <copy file="${project.build.directory}/mysql-dist/my-default.ini" tofile="${project.build.directory}/mysql-dist/support-files/my-default.cnf" failonerror="false" />
+                  </tasks>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>          
+          <plugin>
             <groupId>com.jcabi</groupId>
             <artifactId>jcabi-mysql-maven-plugin</artifactId>
             <version>${jcabi-mysql-maven-plugin.version}</version>
@@ -418,7 +435,7 @@
                 </goals>
                 <configuration>
                   <port>${mysql.port}</port>
-                  <data>${project.build.directory}/mysql-data</data>
+                  <data>${java.io.tmpdir}/mondrian/mysql-data</data>
                 </configuration>
               </execution>
             </executions>

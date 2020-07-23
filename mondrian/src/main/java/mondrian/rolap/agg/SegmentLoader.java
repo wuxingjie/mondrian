@@ -5,7 +5,7 @@
 // You must accept the terms of that agreement to use this software.
 //
 // Copyright (C) 2002-2005 Julian Hyde
-// Copyright (C) 2005-2017 Hitachi Vantara and others
+// Copyright (C) 2005-2018 Hitachi Vantara and others
 // All Rights Reserved.
 */
 package mondrian.rolap.agg;
@@ -26,6 +26,7 @@ import mondrian.util.*;
 import org.apache.log4j.Logger;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -341,6 +342,7 @@ public class SegmentLoader {
                 case INT:
                 case LONG:
                 case DOUBLE:
+                case DECIMAL:
                     Object o = rows.getObject(j);
                     if (useGroupingSet
                         && (o == null || o == RolapUtil.sqlNullValue)
@@ -773,6 +775,28 @@ public class SegmentLoader {
                         processedRows.setDouble(columnIndex, doubleValue);
                     }
                     break;
+                case DECIMAL:
+                    final BigDecimal decimal = rawRows.getBigDecimal(columnIndex + 1);
+                    if (decimal == null && rawRows.wasNull()) {
+                        if (!groupingSetsList.useGroupingSets()
+                          || !isAggregateNull(
+                          rawRows, groupingColumnStartIndex,
+                          groupingSetsList,
+                          axisIndex))
+                        {
+                            axisContainsNull[axisIndex] = true;
+                        }
+                        processedRows.setNull(columnIndex, true);
+                    } else {
+                        final double val = rawRows.getBigDecimal( columnIndex + 1 ).doubleValue();
+                        if ( val == Double.NEGATIVE_INFINITY || val == Double.POSITIVE_INFINITY ) {
+                            throw MondrianResource.instance().JavaDoubleOverflow
+                              .ex( rawRows.getMetaData().getColumnName( columnIndex + 1 ) );
+                        }
+                        axisValueSets[axisIndex].add(val);
+                        processedRows.setDouble(columnIndex, val);
+                    }
+                    break;
                 default:
                     throw Util.unexpected(type);
                 }
@@ -798,6 +822,8 @@ public class SegmentLoader {
                     } else if (numeric[i]) {
                         if (o instanceof Double) {
                             // nothing to do
+                        } else if (o instanceof BigDecimal ) {
+                            // nothing to do // PDI-16761 if we cast it to double type we lose precision
                         } else if (o instanceof Number) {
                             o = ((Number) o).doubleValue();
                         } else if (o instanceof byte[]) {
@@ -832,6 +858,19 @@ public class SegmentLoader {
                         processedRows.setNull(columnIndex, true);
                     }
                     break;
+                case DECIMAL:
+                    final BigDecimal decimal = rawRows.getBigDecimal(columnIndex + 1);
+                    if (decimal == null && rawRows.wasNull()) {
+                        //processedRows.setDouble( columnIndex, 0 );
+                        processedRows.setNull(columnIndex, true);
+                    } else {
+                        final double val = rawRows.getBigDecimal( columnIndex + 1 ).doubleValue();
+                        if ( val == Double.NEGATIVE_INFINITY || val == Double.POSITIVE_INFINITY ) {
+                            throw MondrianResource.instance().JavaDoubleOverflow
+                              .ex( rawRows.getMetaData().getColumnName( columnIndex + 1 ) );
+                        }
+                        processedRows.setDouble( columnIndex, val );
+                    }
                 default:
                     throw Util.unexpected(type);
                 }
@@ -1151,6 +1190,7 @@ public class SegmentLoader {
                 case LONG:
                     return new LongColumn(ordinal, type, capacity);
                 case DOUBLE:
+                case DECIMAL:
                     return new DoubleColumn(ordinal, type, capacity);
                 default:
                     throw Util.unexpected(type);

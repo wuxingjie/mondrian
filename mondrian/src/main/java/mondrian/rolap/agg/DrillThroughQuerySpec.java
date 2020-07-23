@@ -5,13 +5,15 @@
 // You must accept the terms of that agreement to use this software.
 //
 // Copyright (C) 2005-2005 Julian Hyde
-// Copyright (C) 2005-2017 Hitachi Vantara
+// Copyright (C) 2005-2018 Hitachi Vantara
 // All Rights Reserved.
 */
 package mondrian.rolap.agg;
 
 import mondrian.olap.*;
 import mondrian.rolap.*;
+import mondrian.rolap.RolapStar.Column;
+import mondrian.rolap.RolapStar.Measure;
 import mondrian.rolap.sql.SqlQuery;
 import mondrian.util.Pair;
 
@@ -138,10 +140,34 @@ class DrillThroughQuerySpec extends AbstractQuerySpec {
             : request.getMeasure();
     }
 
+    private boolean isSelectAliasTaken(Column[] cols, String alias) {
+        if (columnNames.contains(alias)) {
+            // Possible conflict of alias.
+            for (int j = 0; j < cols.length; j++) {
+                if (getColumnAlias(j).equals(alias)
+                    && isPartOfSelect(cols[j]))
+                {
+                    // Definite conflict.
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public String getMeasureAlias(final int i) {
-        return request.getDrillThroughMeasures().size() > 0
-            ? request.getDrillThroughMeasures().get(i).getName()
-            : columnNames.get(columnNames.size() - 1);
+        String alias =
+            request.getDrillThroughMeasures().size() > 0
+                ? request.getDrillThroughMeasures().get(i).getName()
+                : columnNames.get(columnNames.size() - 1);
+        int j = 0;
+        String maybe = alias;
+        final Column[] cols = getColumns();
+        while (isSelectAliasTaken(cols, maybe)) {
+            maybe = alias.concat("_").concat("" + j);
+            j++;
+        }
+        return maybe;
     }
 
     public RolapStar.Column[] getColumns() {
@@ -224,11 +250,16 @@ class DrillThroughQuerySpec extends AbstractQuerySpec {
             for (RolapStar.Column column
                 : predicate.getConstrainedColumnList())
             {
-                if ( request.includeInSelect( column ) ) {
+              // add to Select clause only columns
+              // that are not yet in Select clause
+              // there is no need to have the same column twice
+                if (request.includeInSelect(column)
+                    && !columnNameSet.contains(column.getName()))
+                {
                     sqlQuery.addSelect(
-                      column.generateExprString(sqlQuery),
-                      column.getInternalType(),
-                      makeAlias(column, columnNames, columnNameSet));
+                        column.generateExprString(sqlQuery),
+                        column.getInternalType(),
+                        makeAlias(column, columnNames, columnNameSet));
                 }
             }
         }
